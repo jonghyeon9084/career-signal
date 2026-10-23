@@ -36,8 +36,9 @@ function loadScript(src){
   });
 }
 export class SheetsSync {
-  constructor({fetchImpl=(...args)=>fetch(...args),onState=()=>{}}={}){this.fetchImpl=fetchImpl;this.onState=onState;this.token=null;this.expires=0;this.client=null;this.ready=null;this.connecting=false;}
-  get connected(){return Boolean(this.token&&Date.now()<this.expires);}
+  constructor({fetchImpl=(...args)=>fetch(...args),onState=()=>{}}={}){this.fetchImpl=fetchImpl;this.onState=onState;this.token=null;this.expires=0;this.client=null;this.ready=null;this.connecting=false;this.authorized=false;}
+  get hasToken(){return Boolean(this.token&&Date.now()<this.expires);}
+  get connected(){return this.hasToken&&this.authorized;}
   prepare(){
     if(!isSyncConfigured())return Promise.resolve(false);
     if(!this.ready)this.ready=Promise.all([loadScript('https://accounts.google.com/gsi/client'),loadScript('https://apis.google.com/js/api.js')]).then(()=>new Promise((resolve,reject)=>{
@@ -51,20 +52,28 @@ export class SheetsSync {
     if(!this.client)return Promise.reject(new Error('Google 연결 준비 중입니다. 잠시 후 다시 눌러 주세요.'));
     if(this.connecting)return Promise.reject(new Error('Google 연결을 진행 중입니다.'));
     this.connecting=true;this.onState('connecting');
+    if(this.hasToken)return this.finishConnection();
     return new Promise((resolve,reject)=>{
       this.rejectConnection=reject;
       this.client.callback=async response=>{
         if(response.error||!response.access_token){this.disconnect();reject(new Error('Google 연결을 허용하지 않았습니다.'));return;}
         if(!window.google.accounts.oauth2.hasGrantedAllScopes(response,SCOPE)){this.disconnect();reject(new Error('선택한 시트에 대한 접근 권한이 필요합니다.'));return;}
         this.token=response.access_token;this.expires=Date.now()+(Number(response.expires_in)-60)*1000;
-        try{
-          await this.ensureSheetAccess();
-          const snapshot=await this.read();
-          this.connecting=false;this.onState('connected');resolve(snapshot);
-        }catch(error){this.disconnect();reject(error);}
+        try{resolve(await this.finishConnection());}catch(error){reject(error);}
       };
       this.client.requestAccessToken({prompt:''});
     });
+  }
+  async finishConnection(){
+    try{
+      await this.ensureSheetAccess();
+      const snapshot=await this.read();
+      this.authorized=true;this.connecting=false;this.onState('connected');return snapshot;
+    }catch(error){
+      if(error.pickerRetryable&&this.hasToken){this.authorized=false;this.connecting=false;this.onState('file-required');}
+      else this.disconnect();
+      throw error;
+    }
   }
   async ensureSheetAccess(){
     const endpoint=`https://www.googleapis.com/drive/v3/files/${SHEET_ID}?fields=id,isAppAuthorized,capabilities(canEdit)`;
@@ -78,19 +87,23 @@ export class SheetsSync {
     return new Promise((resolve,reject)=>{
       const g=window.google;
       let picker,timer,settled=false;
-      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);picker?.setVisible(false);error?reject(error):resolve();};
+      const recovery=document.createElement('button');recovery.type='button';recovery.className='picker-recovery';recovery.textContent='파일 선택 창 닫기 · 다시 시도';
+      const retryError=message=>Object.assign(new Error(message),{pickerRetryable:true});
+      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);recovery.remove();picker?.dispose();error?reject(error):resolve();};
+      recovery.addEventListener('click',()=>finish(retryError('Google 로그인은 유지됩니다. 파일 선택을 다시 시도해 주세요.')));
       const view=new g.picker.DocsView(g.picker.ViewId.SPREADSHEETS).setMode(g.picker.DocsViewMode.LIST).setQuery('지원 후보 리스트');
       picker=new g.picker.PickerBuilder().addView(view).setOAuthToken(this.token).setDeveloperKey(GOOGLE_PICKER_API_KEY).setAppId(GOOGLE_PROJECT_NUMBER).setOrigin(location.origin).setLocale('ko').setTitle('동기화할 ‘지원 후보 리스트’를 선택하세요').setCallback(data=>{
-        if(data.action===g.picker.Action.PICKED){const selected=data.docs?.[0];finish(selected?.id!==SHEET_ID?new Error('연결된 채용 시트 ‘지원 후보 리스트’를 선택해 주세요.'):null);}
-        if(data.action===g.picker.Action.CANCEL)finish(new Error('시트 선택을 취소했습니다.'));
+        if(data.action===g.picker.Action.PICKED){const selected=data.docs?.[0];finish(selected?.id!==SHEET_ID?retryError('연결된 채용 시트 ‘지원 후보 리스트’를 선택해 주세요.'):null);}
+        if(data.action===g.picker.Action.CANCEL)finish(retryError('시트 선택을 취소했습니다. 파일 선택을 다시 시도할 수 있습니다.'));
       }).build();
-      timer=setTimeout(()=>finish(new Error('시트 선택 시간이 지났습니다. Google 연결을 다시 시도해 주세요.')),120000);
+      timer=setTimeout(()=>finish(retryError('Google 파일 선택기가 응답하지 않았습니다. 로그인은 유지되며 파일 선택만 다시 시도할 수 있습니다.')),120000);
       picker.setVisible(true);
+      document.body.append(recovery);
     });
   }
-  disconnect(){this.token=null;this.expires=0;this.connecting=false;this.onState('disconnected');}
+  disconnect(){this.token=null;this.expires=0;this.authorized=false;this.connecting=false;this.onState('disconnected');}
   async request(url,options={}){
-    if(!this.connected){this.disconnect();throw new Error('Google 연결이 만료되었습니다. 다시 연결해 주세요.');}
+    if(!this.hasToken){this.disconnect();throw new Error('Google 연결이 만료되었습니다. 다시 연결해 주세요.');}
     const response=await this.fetchImpl(url,{...options,cache:'no-store',headers:{Authorization:`Bearer ${this.token}`,...options.headers},signal:AbortSignal.timeout(20000)});
     if(!response.ok){
       if(response.status===401)this.disconnect();

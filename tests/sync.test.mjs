@@ -63,3 +63,15 @@ test('previous explicit file grants skip Picker; public visibility alone does no
   sync.request=async()=>({id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:false}});
   await assert.rejects(sync.ensureSheetAccess(),/수정할 수 없습니다/);
 });
+
+test('a failed file chooser retains login and retries without another OAuth popup',async()=>{
+  const sync=new SheetsSync();let popups=0,attempts=0;
+  sync.client={requestAccessToken(){popups++;}};
+  sync.token='test-only';sync.expires=Date.now()+60000;
+  sync.ensureSheetAccess=async()=>{if(++attempts===1)throw Object.assign(new Error('picker timeout'),{pickerRetryable:true});};
+  sync.read=async()=>sheetSnapshot(fixture());
+  await assert.rejects(sync.connect(),/picker timeout/);
+  assert.equal(sync.hasToken,true);assert.equal(sync.connected,false);assert.equal(sync.connecting,false);
+  await sync.connect();
+  assert.equal(sync.connected,true);assert.equal(popups,0);assert.equal(attempts,2);
+});
