@@ -51,3 +51,15 @@ test('pending Google connection prevents duplicate attempts and resets on denial
   await denied;
   assert.equal(sync.connecting,false);assert.equal(sync.connected,false);
 });
+
+test('previous explicit file grants skip Picker; public visibility alone does not',async()=>{
+  const {SHEET_ID}=await import('../dist/model.js');
+  const sync=new SheetsSync();let chosen=0;
+  sync.request=async()=>({id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:true}});
+  sync.pickSheet=async()=>{chosen++;};
+  await sync.ensureSheetAccess();assert.equal(chosen,0);
+  let reads=0;sync.request=async()=>({id:SHEET_ID,isAppAuthorized:++reads>1,capabilities:{canEdit:true}});
+  await sync.ensureSheetAccess();assert.equal(chosen,1);
+  sync.request=async()=>({id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:false}});
+  await assert.rejects(sync.ensureSheetAccess(),/수정할 수 없습니다/);
+});

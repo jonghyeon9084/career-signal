@@ -58,14 +58,21 @@ export class SheetsSync {
         if(!window.google.accounts.oauth2.hasGrantedAllScopes(response,SCOPE)){this.disconnect();reject(new Error('선택한 시트에 대한 접근 권한이 필요합니다.'));return;}
         this.token=response.access_token;this.expires=Date.now()+(Number(response.expires_in)-60)*1000;
         try{
-          // Explicit selection grants drive.file access even when this sheet is publicly readable.
-          await this.pickSheet();
+          await this.ensureSheetAccess();
           const snapshot=await this.read();
           this.connecting=false;this.onState('connected');resolve(snapshot);
         }catch(error){this.disconnect();reject(error);}
       };
       this.client.requestAccessToken({prompt:''});
     });
+  }
+  async ensureSheetAccess(){
+    const endpoint=`https://www.googleapis.com/drive/v3/files/${SHEET_ID}?fields=id,isAppAuthorized,capabilities(canEdit)`;
+    let file;
+    try{file=await this.request(endpoint);}catch(error){if(![403,404].includes(error.status))throw error;}
+    if(!file?.isAppAuthorized){await this.pickSheet();file=await this.request(endpoint);}
+    if(file?.id!==SHEET_ID||!file.isAppAuthorized)throw new Error('선택한 채용 시트의 접근 권한을 확인하지 못했습니다. 다시 연결해 주세요.');
+    if(!file.capabilities?.canEdit)throw new Error('현재 Google 계정은 이 시트를 수정할 수 없습니다. 시트 소유자 계정으로 연결해 주세요.');
   }
   pickSheet(){
     return new Promise((resolve,reject)=>{

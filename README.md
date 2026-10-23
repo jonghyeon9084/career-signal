@@ -33,9 +33,9 @@ node --test tests/*.test.mjs
 
 `dist/sync-config.js`에 웹 OAuth 클라이언트 ID, Google Picker용 공개 API 키, 프로젝트 번호를 지정합니다. 접근 토큰이나 클라이언트 비밀키를 저장소에 넣지 않습니다. `drive.file` 범위만 요청하며 사용자가 파일 선택기에서 승인한 채용 시트의 관심·지원 셀만 변경합니다.
 
-Google Cloud 프로젝트 `civic-wall-512515-m1`에서 Google Sheets API와 Google Picker API를 사용 설정합니다. OAuth 승인 출처는 `https://jonghyeon9084.github.io`입니다. 개발 시 `http://localhost:4173`도 별도로 등록해야 합니다. Picker API 키는 사이트 출처와 파일 선택기가 실행되는 `https://docs.google.com/*`, Picker API만 허용하도록 제한합니다. 개인용 OAuth 앱은 사용자 계정만 테스트 사용자로 지정합니다. 결제 계정이나 유료 컴퓨팅 리소스는 필요하지 않습니다.
+Google Cloud 프로젝트 `civic-wall-512515-m1`에서 Google Sheets API, Google Picker API, Google Drive API를 사용 설정합니다. OAuth 승인 출처는 `https://jonghyeon9084.github.io`입니다. 개발 시 `http://localhost:4173`도 별도로 등록해야 합니다. Picker API 키는 사이트 출처와 파일 선택기가 실행되는 `https://docs.google.com/*`, Picker·Drive API만 허용하도록 제한합니다. 개인용 OAuth 앱은 사용자 계정만 테스트 사용자로 지정합니다. 결제 계정이나 유료 컴퓨팅 리소스는 필요하지 않습니다.
 
-다른 기기에서 같은 Google 계정으로 연결하고 동일한 시트를 선택하면 됩니다. Google 로그인을 하지 않은 방문자에게 시트 쓰기 권한을 제공하지 않습니다. Google Sheets는 셀에 대한 원자적인 비교 후 쓰기 API를 제공하지 않으므로, 외부에서 행을 정렬·삭제하는 작업과 저장 버튼을 동시에 수행하지 않는 것이 좋습니다. 앱은 저장 직전에 현재 행을 재조회합니다.
+다른 기기에서 같은 Google 계정으로 연결하면 됩니다. 이미 앱에 허용한 시트는 Drive API의 isAppAuthorized 및 canEdit으로 확인하여 파일 선택을 생략합니다. 최초 연결에서는 지원 후보 리스트를 선택합니다. Google 로그인을 하지 않은 방문자에게 시트 쓰기 권한을 제공하지 않습니다. Google Sheets는 셀에 대한 원자적인 비교 후 쓰기 API를 제공하지 않으므로, 외부에서 행을 정렬·삭제하는 작업과 저장 버튼을 동시에 수행하지 않는 것이 좋습니다. 앱은 저장 직전에 현재 행을 재조회합니다.
 
 필수 헤더: `기업명`, `직무`. 지원 헤더: `지원 여부`, `관심 공고`, `요구 기술`, `연봉`, `매출액`, `직원수`, `모집 마감일`, `공고 링크`. 열 순서를 바꾸거나 행을 추가해도 이름으로 연결합니다.
 
