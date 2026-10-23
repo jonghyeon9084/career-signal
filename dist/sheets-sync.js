@@ -36,12 +36,12 @@ function loadScript(src){
   });
 }
 export class SheetsSync {
-  constructor({fetchImpl=(...args)=>fetch(...args),onState=()=>{}}={}){this.fetchImpl=fetchImpl;this.onState=onState;this.token=null;this.expires=0;this.client=null;this.ready=null;}
+  constructor({fetchImpl=(...args)=>fetch(...args),onState=()=>{}}={}){this.fetchImpl=fetchImpl;this.onState=onState;this.token=null;this.expires=0;this.client=null;this.ready=null;this.connecting=false;}
   get connected(){return Boolean(this.token&&Date.now()<this.expires);}
   prepare(){
     if(!isSyncConfigured())return Promise.resolve(false);
     if(!this.ready)this.ready=Promise.all([loadScript('https://accounts.google.com/gsi/client'),loadScript('https://apis.google.com/js/api.js')]).then(()=>new Promise((resolve,reject)=>{
-      window.gapi.load('picker',{callback:()=>{this.client=window.google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,include_granted_scopes:false,callback:()=>{},error_callback:()=>{this.onState('disconnected');this.rejectConnection?.(new Error('로그인 창이 닫혔거나 차단되었습니다. 다시 연결해 주세요.'));}});resolve(true);},onerror:()=>reject(new Error('파일 선택 도구를 불러오지 못했습니다.')),timeout:20000,ontimeout:()=>reject(new Error('파일 선택 도구 연결 시간이 초과되었습니다.'))});
+      window.gapi.load('picker',{callback:()=>{this.client=window.google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,include_granted_scopes:false,callback:()=>{},error_callback:()=>{this.disconnect();this.rejectConnection?.(new Error('로그인 창이 닫혔거나 차단되었습니다. 다시 연결해 주세요.'));}});resolve(true);},onerror:()=>reject(new Error('파일 선택 도구를 불러오지 못했습니다.')),timeout:20000,ontimeout:()=>reject(new Error('파일 선택 도구 연결 시간이 초과되었습니다.'))});
     })).catch(error=>{this.ready=null;throw error;});
     return this.ready;
   }
@@ -49,18 +49,19 @@ export class SheetsSync {
   connect(){
     if(!isSyncConfigured())return Promise.reject(new Error('Google 연결 설정을 마무리해야 합니다.'));
     if(!this.client)return Promise.reject(new Error('Google 연결 준비 중입니다. 잠시 후 다시 눌러 주세요.'));
-    this.onState('connecting');
+    if(this.connecting)return Promise.reject(new Error('Google 연결을 진행 중입니다.'));
+    this.connecting=true;this.onState('connecting');
     return new Promise((resolve,reject)=>{
       this.rejectConnection=reject;
       this.client.callback=async response=>{
-        if(response.error||!response.access_token){this.onState('disconnected');reject(new Error('Google 연결을 허용하지 않았습니다.'));return;}
-        if(!window.google.accounts.oauth2.hasGrantedAllScopes(response,SCOPE)){this.onState('disconnected');reject(new Error('선택한 시트에 대한 접근 권한이 필요합니다.'));return;}
+        if(response.error||!response.access_token){this.disconnect();reject(new Error('Google 연결을 허용하지 않았습니다.'));return;}
+        if(!window.google.accounts.oauth2.hasGrantedAllScopes(response,SCOPE)){this.disconnect();reject(new Error('선택한 시트에 대한 접근 권한이 필요합니다.'));return;}
         this.token=response.access_token;this.expires=Date.now()+(Number(response.expires_in)-60)*1000;
         try{
           // Explicit selection grants drive.file access even when this sheet is publicly readable.
           await this.pickSheet();
           const snapshot=await this.read();
-          this.onState('connected');resolve(snapshot);
+          this.connecting=false;this.onState('connected');resolve(snapshot);
         }catch(error){this.disconnect();reject(error);}
       };
       this.client.requestAccessToken({prompt:''});
@@ -69,14 +70,18 @@ export class SheetsSync {
   pickSheet(){
     return new Promise((resolve,reject)=>{
       const g=window.google;
+      let picker,timer,settled=false;
+      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);picker?.setVisible(false);error?reject(error):resolve();};
       const view=new g.picker.DocsView(g.picker.ViewId.SPREADSHEETS).setMode(g.picker.DocsViewMode.LIST).setQuery('지원 후보 리스트');
-      const picker=new g.picker.PickerBuilder().addView(view).setOAuthToken(this.token).setDeveloperKey(GOOGLE_PICKER_API_KEY).setAppId(GOOGLE_PROJECT_NUMBER).setOrigin(location.origin).setLocale('ko').setTitle('동기화할 ‘지원 후보 리스트’를 선택하세요').setCallback(data=>{
-        if(data.action===g.picker.Action.PICKED){const selected=data.docs?.[0];if(selected?.id!==SHEET_ID)reject(new Error('연결된 채용 시트 ‘지원 후보 리스트’를 선택해 주세요.'));else resolve();}
-        if(data.action===g.picker.Action.CANCEL)reject(new Error('시트 선택을 취소했습니다.'));
-      }).build();picker.setVisible(true);
+      picker=new g.picker.PickerBuilder().addView(view).setOAuthToken(this.token).setDeveloperKey(GOOGLE_PICKER_API_KEY).setAppId(GOOGLE_PROJECT_NUMBER).setOrigin(location.origin).setLocale('ko').setTitle('동기화할 ‘지원 후보 리스트’를 선택하세요').setCallback(data=>{
+        if(data.action===g.picker.Action.PICKED){const selected=data.docs?.[0];finish(selected?.id!==SHEET_ID?new Error('연결된 채용 시트 ‘지원 후보 리스트’를 선택해 주세요.'):null);}
+        if(data.action===g.picker.Action.CANCEL)finish(new Error('시트 선택을 취소했습니다.'));
+      }).build();
+      timer=setTimeout(()=>finish(new Error('시트 선택 시간이 지났습니다. Google 연결을 다시 시도해 주세요.')),120000);
+      picker.setVisible(true);
     });
   }
-  disconnect(){this.token=null;this.expires=0;this.onState('disconnected');}
+  disconnect(){this.token=null;this.expires=0;this.connecting=false;this.onState('disconnected');}
   async request(url,options={}){
     if(!this.connected){this.disconnect();throw new Error('Google 연결이 만료되었습니다. 다시 연결해 주세요.');}
     const response=await this.fetchImpl(url,{...options,cache:'no-store',headers:{Authorization:`Bearer ${this.token}`,...options.headers},signal:AbortSignal.timeout(20000)});

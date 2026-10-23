@@ -15,6 +15,7 @@ const marked=(job,key)=>typeof state.marks[job.id]?.[key]==='boolean'?state.mark
 const sync=new SheetsSync({onState:mode=>{
   $('sync-button').textContent=mode==='connected'?'Google 연결됨':mode==='connecting'?'연결 중…':'Google 연결';
   $('sync-button').classList.toggle('connected',mode==='connected');
+  $('sync-button').disabled=mode==='connecting';
 }});
 hydrateIcons();
 document.querySelectorAll('.sheet-link').forEach(a=>a.href=SHEET_URL);
@@ -66,7 +67,7 @@ function checkedLabel(){
   $('last-checked').textContent=`최근 확인 ${time}`;
 }
 async function refresh(){
-  if(state.busy||state.saving)return;
+  if(state.busy||state.saving||sync.connecting)return;
   if(sync.token&&!sync.connected)sync.disconnect();
   const revision=state.revision;
   state.busy=true;$('refresh').disabled=true;$('job-grid').setAttribute('aria-busy','true');status('loading','최신 정보 확인 중');

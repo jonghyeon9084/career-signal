@@ -40,3 +40,14 @@ test('another device reads exactly the latest remote status',async()=>{
   const device=new SheetsSync({fetchImpl:async()=>({ok:true,json:async()=>data})});device.token='test-only';device.expires=Date.now()+60000;
   assert.equal((await device.read()).jobs[0].saved,true);
 });
+
+test('pending Google connection prevents duplicate attempts and resets on denial',async()=>{
+  const sync=new SheetsSync();sync.client={requestAccessToken(){}};
+  const attempt=sync.connect();
+  assert.equal(sync.connecting,true);
+  await assert.rejects(sync.connect(),/진행 중/);
+  const denied=assert.rejects(attempt,/허용하지/);
+  await sync.client.callback({error:'access_denied'});
+  await denied;
+  assert.equal(sync.connecting,false);assert.equal(sync.connected,false);
+});
