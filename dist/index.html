@@ -26,7 +26,7 @@
   <div class="sidebar-bottom"><div class="source-card"><span class="source-icon" data-icon="sheet"></span><strong>흩어진 공고를, 한곳에.</strong><p>구글 시트의 채용 정보를<br>자동으로 불러오고 있어요.</p><a class="sheet-link" target="_blank" rel="noopener noreferrer">원본 시트 열기 <span data-icon="arrow-up-right"></span></a></div><div class="sidebar-foot"><span class="tiny-signal"></span> A little closer to your next.</div></div>
 </aside>
 <div class="page">
-  <header class="topbar"><div class="breadcrumb">내 워크스페이스 <span>/</span> <strong id="breadcrumb-view">전체 공고</strong></div><div class="topbar-right"><span id="connection" class="connection loading"><i></i><span>시트 연결 중</span></span><button id="refresh" class="icon-button" title="최신 정보 새로고침" aria-label="최신 정보 새로고침"><span data-icon="refresh"></span></button><span class="profile-avatar" aria-label="나의 프로필">JH</span></div></header>
+  <header class="topbar"><div class="breadcrumb">내 워크스페이스 <span>/</span> <strong id="breadcrumb-view">전체 공고</strong></div><div class="topbar-right"><span id="connection" class="connection loading"><i></i><span>시트 연결 중</span></span><button id="sync-button" class="sync-button">Google 연결</button><button id="refresh" class="icon-button" title="최신 정보 새로고침" aria-label="최신 정보 새로고침"><span data-icon="refresh"></span></button><span class="profile-avatar" aria-label="나의 프로필">JH</span></div></header>
   <main id="main">
     <section class="welcome"><div><div class="eyebrow"><span class="line"></span> YOUR NEXT CHAPTER</div><h1>좋은 기회는,<br class="mobile-break"> 준비된 나에게.</h1><p>나에게 맞는 채용 정보만 모아, 다음 커리어를 차근차근.</p></div><div class="today"><span data-icon="calendar"></span><span id="today"></span></div></section>
     <section class="stats" aria-label="채용 정보 요약">
@@ -38,7 +38,8 @@
     <section class="spotlight"><div class="spotlight-symbol"><span data-icon="sparkles"></span></div><div><span class="spotlight-kicker">MAKE YOUR NEXT MOVE</span><h2 id="spotlight-title">다음 기회를 찾아볼 시간이에요.</h2><p id="spotlight-description">최신 채용 정보를 불러오고 있습니다.</p></div><button id="closing-shortcut">마감 임박 공고 <span data-icon="arrow-right"></span></button><div class="signal-art" aria-hidden="true"><i></i><i></i><i></i><i></i><b>↗</b></div></section>
     <section class="jobs-section" aria-labelledby="jobs-heading">
       <div class="section-heading"><div class="heading-group"><h2 id="jobs-heading">전체 채용 공고</h2><span id="result-count">—</span></div><span id="last-checked" class="last-checked">원본 시트에 연결하고 있어요</span></div>
-      <div class="search-row"><label class="search-box"><span data-icon="search"></span><input id="search" type="search" placeholder="기업명, 직무, 기술 키워드로 찾아보세요" aria-label="채용 공고 검색" autocomplete="off"><kbd>/</kbd></label><label class="select-wrap"><span class="sr-only">정렬 기준</span><select id="sort"><option value="deadline">마감 가까운 순</option><option value="sheet">시트 등록 순</option><option value="company">기업명 순</option></select></label></div>
+      <div class="search-row"><label class="search-box"><span data-icon="search"></span><input id="search" type="search" placeholder="기업명, 직무, 기술 키워드로 찾아보세요" aria-label="채용 공고 검색" autocomplete="off"><kbd>/</kbd></label><label class="select-wrap"><span class="sr-only">정렬 기준</span><select id="sort"><option value="deadline">마감 가까운 순</option><option value="employees-desc">기업 규모 큰 순 (직원 수)</option><option value="employees-asc">기업 규모 작은 순 (직원 수)</option><option value="salary-desc">연봉 높은 순</option><option value="salary-asc">연봉 낮은 순</option><option value="sheet">시트 등록 순</option><option value="company">기업명 순</option></select></label></div>
+      <p id="sort-note" class="sort-note" hidden></p>
       <div class="filter-row"><div id="category-chips" class="chips" aria-label="분야 필터"></div><label class="closed-toggle"><input id="include-closed" type="checkbox"><span></span>마감 공고 포함</label></div>
       <div id="filter-summary" class="filter-summary" hidden><span></span><button id="clear-filters">필터 초기화 <span aria-hidden="true">×</span></button></div>
       <div id="notice" class="notice" role="status" hidden></div>
@@ -46,10 +47,11 @@
       <div id="empty-state" class="empty-state" hidden><span data-icon="search"></span><h3>조건에 맞는 공고가 없어요</h3><p>검색어나 필터를 바꾸면 더 많은 기회를 발견할 수 있어요.</p><button id="empty-reset" class="primary-button">전체 공고 보기</button></div>
       <button id="load-more" class="load-more" hidden>공고 더 보기 <span data-icon="chevron-down"></span></button>
     </section>
-    <footer><span><span class="footer-dot"></span> 원본 시트 자동 연결 · 1분마다 최신 정보 확인</span><span>관심·지원 표시 변경은 이 브라우저에 저장됩니다.</span></footer>
+    <footer><span><span class="footer-dot"></span> 원본 시트 자동 연결 · 1분마다 최신 정보 확인</span><span>Google 연결 후 관심·지원 상태가 시트와 모든 기기에 공유됩니다.</span></footer>
   </main>
 </div>
 <dialog id="job-dialog"><div class="dialog-top"><span class="eyebrow">YOUR NEXT OPPORTUNITY</span><button id="dialog-close" class="icon-button" aria-label="상세 정보 닫기"><span data-icon="x"></span></button></div><div id="dialog-content"></div></dialog>
+<dialog id="sync-dialog" aria-labelledby="sync-title"><div class="dialog-top"><span class="eyebrow">CONNECTED WORKSPACE</span><button id="sync-close" class="icon-button" aria-label="Google 연결 창 닫기"><span data-icon="x"></span></button></div><h2 id="sync-title">어느 기기에서나, 같은 나의 기록.</h2><p class="sync-description">Google 계정으로 연결하면 관심 공고와 지원 여부를 원본 시트에 바로 저장합니다. 처음 연결할 때 <strong>지원 후보 리스트</strong>를 선택해 주세요.</p><ul class="sync-details"><li>선택한 파일만 접근하도록 요청합니다.</li><li>앱은 ‘관심 공고’와 ‘지원 여부’ 셀만 변경합니다.</li><li>로그인 정보는 현재 페이지 메모리에서만 사용합니다.</li></ul><p id="sync-message" class="sync-message" role="status"></p><div class="sync-actions"><button id="google-connect" class="primary-button">Google로 연결하기</button><button id="google-disconnect" class="secondary-button" hidden>이 기기 연결 해제</button><button id="export-local" class="secondary-button" hidden>이전 기기 표시 백업</button></div><p class="dialog-note">다른 기기에서는 시트 값을 자동으로 표시합니다. 수정하려면 해당 기기에서도 Google 연결이 필요합니다. 기존에 브라우저에만 저장했던 표시는 백업으로 보관하며, 시트 값을 덮어쓰지 않습니다.</p></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <noscript><div class="noscript">채용 정보를 불러오려면 브라우저의 JavaScript를 활성화해 주세요.</div></noscript>
 </body>

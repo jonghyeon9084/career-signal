@@ -3,6 +3,30 @@ export const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edi
 export const CATEGORIES = ['전체', 'PLC·자동제어', '로봇·자율주행', 'SW·임베디드', '기타'];
 export const REFRESH_MS = 60_000;
 
+export function employeeCount(value) {
+  const text=String(value??'').split(/[（(]/)[0].replaceAll(',','');
+  const match=text.match(/(\d+(?:\.\d+)?)\s*(만)?\s*(?:[~〜～-]\s*\d+(?:\.\d+)?\s*(만)?)?\s*명/);
+  return match?Number(match[1])*((match[2]||match[3])?10000:1):null;
+}
+// Salary ordering uses the published lower bound; unspecified working hours are not guessed.
+export function annualSalary(value) {
+  const text=String(value??'').split(/[（(]/)[0].replaceAll(',','');
+  if(/시급|일급|주급|시간당|일당|건당/.test(text))return null;
+  const match=text.match(/(\d+(?:\.\d+)?)\s*(억|천만|백만|만)?\s*(?:원)?\s*(?:[~〜～–-]\s*\d+(?:\.\d+)?\s*(억|천만|백만|만)?)?\s*원/);
+  if(!match)return null;
+  const unit=match[2]||match[3]||'';
+  const amount=Number(match[1])*({'억':1e8,'천만':1e7,'백만':1e6,'만':1e4,'':1}[unit]);
+  if(!Number.isFinite(amount)||amount<=0)return null;
+  return amount*(/월급|월\s|월[0-9]|매월/.test(text)?12:1);
+}
+
+export function compareKnownNumbers(a,b,direction='desc') {
+  if(a===null&&b===null)return 0;
+  if(a===null)return 1;
+  if(b===null)return -1;
+  return direction==='asc'?a-b:b-a;
+}
+
 export function safeUrl(value) {
   try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
 }
@@ -63,6 +87,11 @@ export function selectJobs(jobs, {query='', category='전체', view='all', inclu
     const haystack=`${job.company} ${job.title} ${job.skills} ${job.salary}`.toLocaleLowerCase();
     return terms.every(term=>haystack.includes(term));
   }).sort((a,b)=>{
+    if(sort.startsWith('employees-')||sort.startsWith('salary-')){
+      const [field,direction]=sort.split('-');
+      const number=field==='employees'?employeeCount:annualSalary;
+      return compareKnownNumbers(number(a[field]),number(b[field]),direction)||a.row-b.row;
+    }
     if(sort==='sheet')return a.row-b.row;
     if(sort==='company')return a.company.localeCompare(b.company,'ko');
     const da=deadlineDays(a.deadline,today),db=deadlineDays(b.deadline,today);
