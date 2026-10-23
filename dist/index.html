@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#145c49">
+  <meta name="description" content="매시간 모이는 채용 정보를 한곳에서. 구글 시트와 연결된 나만의 커리어 대시보드.">
+  <title>커리어 시그널 — 나의 채용 대시보드</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<aside class="sidebar">
+  <a class="brand" href="./" aria-label="커리어 시그널 홈"><img src="./favicon.svg" alt="" width="36" height="36"><span>career signal<span class="brand-sub">나의 다음 가능성을 발견하는 곳</span></span></a>
+  <div class="workspace"><span class="workspace-avatar">JH</span><div><strong>나의 커리어 보드</strong><small>PERSONAL WORKSPACE</small></div><span class="workspace-dot"></span></div>
+  <p class="nav-label">MY DASHBOARD</p>
+  <nav class="main-nav" aria-label="공고 보기">
+    <button class="nav-item active" data-view="all"><span data-icon="grid"></span>전체 공고 <span id="nav-all" class="nav-count">—</span></button>
+    <button class="nav-item" data-view="saved"><span data-icon="bookmark"></span>관심 공고 <span id="nav-saved" class="nav-count">—</span></button>
+    <button class="nav-item" data-view="applied"><span data-icon="check-circle"></span>지원 현황 <span id="nav-applied" class="nav-count">—</span></button>
+  </nav>
+  <p class="nav-label category-label">EXPLORE FIELDS</p>
+  <nav id="category-nav" class="category-nav" aria-label="직무 분야"></nav>
+  <div class="sidebar-bottom"><div class="source-card"><span class="source-icon" data-icon="sheet"></span><strong>흩어진 공고를, 한곳에.</strong><p>구글 시트의 채용 정보를<br>자동으로 불러오고 있어요.</p><a class="sheet-link" target="_blank" rel="noopener noreferrer">원본 시트 열기 <span data-icon="arrow-up-right"></span></a></div><div class="sidebar-foot"><span class="tiny-signal"></span> A little closer to your next.</div></div>
+</aside>
+<div class="page">
+  <header class="topbar"><div class="breadcrumb">내 워크스페이스 <span>/</span> <strong id="breadcrumb-view">전체 공고</strong></div><div class="topbar-right"><span id="connection" class="connection loading"><i></i><span>시트 연결 중</span></span><button id="refresh" class="icon-button" title="최신 정보 새로고침" aria-label="최신 정보 새로고침"><span data-icon="refresh"></span></button><span class="profile-avatar" aria-label="나의 프로필">JH</span></div></header>
+  <main id="main">
+    <section class="welcome"><div><div class="eyebrow"><span class="line"></span> YOUR NEXT CHAPTER</div><h1>좋은 기회는,<br class="mobile-break"> 준비된 나에게.</h1><p>나에게 맞는 채용 정보만 모아, 다음 커리어를 차근차근.</p></div><div class="today"><span data-icon="calendar"></span><span id="today"></span></div></section>
+    <section class="stats" aria-label="채용 정보 요약">
+      <button class="stat" data-stat="open"><span class="stat-label">모집 중인 공고 <span data-icon="briefcase"></span></span><span class="stat-value" id="stat-open">—</span><span class="stat-foot">새로운 가능성을 만나보세요 <span>↗</span></span></button>
+      <button class="stat" data-stat="closing"><span class="stat-label">7일 이내 마감 <span class="orange" data-icon="clock"></span></span><span class="stat-value" id="stat-closing">—</span><span class="stat-foot">조금 더 서둘러 확인해요 <span class="orange">●</span></span></button>
+      <button class="stat" data-stat="saved"><span class="stat-label">나의 관심 공고 <span data-icon="bookmark"></span></span><span class="stat-value" id="stat-saved">—</span><span class="stat-foot">마음에 담아 둔 기회 <span>↗</span></span></button>
+      <button class="stat" data-stat="applied"><span class="stat-label">지원한 공고 <span data-icon="check-circle"></span></span><span class="stat-value" id="stat-applied">—</span><span class="stat-foot">한 걸음 더 가까워졌어요 <span>↗</span></span></button>
+    </section>
+    <section class="spotlight"><div class="spotlight-symbol"><span data-icon="sparkles"></span></div><div><span class="spotlight-kicker">MAKE YOUR NEXT MOVE</span><h2 id="spotlight-title">다음 기회를 찾아볼 시간이에요.</h2><p id="spotlight-description">최신 채용 정보를 불러오고 있습니다.</p></div><button id="closing-shortcut">마감 임박 공고 <span data-icon="arrow-right"></span></button><div class="signal-art" aria-hidden="true"><i></i><i></i><i></i><i></i><b>↗</b></div></section>
+    <section class="jobs-section" aria-labelledby="jobs-heading">
+      <div class="section-heading"><div class="heading-group"><h2 id="jobs-heading">전체 채용 공고</h2><span id="result-count">—</span></div><span id="last-checked" class="last-checked">원본 시트에 연결하고 있어요</span></div>
+      <div class="search-row"><label class="search-box"><span data-icon="search"></span><input id="search" type="search" placeholder="기업명, 직무, 기술 키워드로 찾아보세요" aria-label="채용 공고 검색" autocomplete="off"><kbd>/</kbd></label><label class="select-wrap"><span class="sr-only">정렬 기준</span><select id="sort"><option value="deadline">마감 가까운 순</option><option value="sheet">시트 등록 순</option><option value="company">기업명 순</option></select></label></div>
+      <div class="filter-row"><div id="category-chips" class="chips" aria-label="분야 필터"></div><label class="closed-toggle"><input id="include-closed" type="checkbox"><span></span>마감 공고 포함</label></div>
+      <div id="filter-summary" class="filter-summary" hidden><span></span><button id="clear-filters">필터 초기화 <span aria-hidden="true">×</span></button></div>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <div id="job-grid" class="job-grid" aria-live="polite" aria-busy="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+      <div id="empty-state" class="empty-state" hidden><span data-icon="search"></span><h3>조건에 맞는 공고가 없어요</h3><p>검색어나 필터를 바꾸면 더 많은 기회를 발견할 수 있어요.</p><button id="empty-reset" class="primary-button">전체 공고 보기</button></div>
+      <button id="load-more" class="load-more" hidden>공고 더 보기 <span data-icon="chevron-down"></span></button>
+    </section>
+    <footer><span><span class="footer-dot"></span> 원본 시트 자동 연결 · 1분마다 최신 정보 확인</span><span>관심·지원 표시 변경은 이 브라우저에 저장됩니다.</span></footer>
+  </main>
+</div>
+<dialog id="job-dialog"><div class="dialog-top"><span class="eyebrow">YOUR NEXT OPPORTUNITY</span><button id="dialog-close" class="icon-button" aria-label="상세 정보 닫기"><span data-icon="x"></span></button></div><div id="dialog-content"></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<noscript><div class="noscript">채용 정보를 불러오려면 브라우저의 JavaScript를 활성화해 주세요.</div></noscript>
+</body>
+</html>
