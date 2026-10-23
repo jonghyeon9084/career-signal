@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SheetsSync,sheetSnapshot,prepareMarkWrite,columnName} from '../dist/sheets-sync.js';
+import {SheetsSync,sheetSnapshot,prepareMarkWrite,columnName,fileAccessUrl} from '../dist/sheets-sync.js';
 const cell=value=>typeof value==='boolean'?{effectiveValue:{boolValue:value},dataValidation:{condition:{type:'BOOLEAN'},strict:true}}:{formattedValue:value};
 function fixture(row=8,duplicate=false){
   const header=['지원 여부','관심 공고','기업명','직무','요구 기술','연봉','매출액','직원수','모집 마감일','공고 링크'].map(cell);
@@ -74,4 +74,16 @@ test('a failed file chooser retains login and retries without another OAuth popu
   assert.equal(sync.hasToken,true);assert.equal(sync.connected,false);assert.equal(sync.connecting,false);
   await sync.connect();
   assert.equal(sync.connected,true);assert.equal(popups,0);assert.equal(attempts,2);
+});
+
+test('first-party file selection keeps the single-file scope and never puts access tokens in its URL',()=>{
+  const url=new URL(fileAccessUrl({redirectUri:'https://example.com/file-access.html',state:'random-state'}));
+  assert.equal(url.origin,'https://accounts.google.com');
+  assert.equal(url.searchParams.get('scope'),'https://www.googleapis.com/auth/drive.file');
+  assert.equal(url.searchParams.get('include_granted_scopes'),'false');
+  assert.equal(url.searchParams.get('response_type'),'code');
+  assert.equal(url.searchParams.get('trigger_onepick'),'true');
+  assert.equal(url.searchParams.get('state'),'random-state');
+  assert.equal(url.searchParams.has('access_token'),false);
+  assert.equal(url.searchParams.has('client_secret'),false);
 });

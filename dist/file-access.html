@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>커리어 시그널 — 파일 연결</title>
+<script>
+// Remove the unused, short-lived authorization code before loading any resources.
+const response=new URLSearchParams(location.search);
+const result={state:response.get('state'),files:(response.get('picked_file_ids')||'').split(','),error:response.get('error')};
+history.replaceState(null,'',location.pathname);
+document.addEventListener('DOMContentLoaded',()=>{
+  if(!result.state){document.getElementById('status').textContent='채용 사이트의 Google 연결 버튼에서 시작해 주세요.';return;}
+  const channel=new BroadcastChannel('career-signal-file-access');
+  const send=()=>channel.postMessage(result);send();
+  const retry=setInterval(send,500);
+  const timeout=setTimeout(()=>{clearInterval(retry);channel.close();document.getElementById('status').textContent='열려 있는 채용 사이트로 돌아가 연결 상태를 확인해 주세요.';},30000);
+  channel.onmessage=({data})=>{if(data?.type!=='ack'||data.state!==result.state)return;clearInterval(retry);clearTimeout(timeout);channel.close();document.getElementById('status').textContent='파일 선택 결과를 전달했습니다. 채용 사이트에서 연결을 확인하고 있습니다.';window.close();};
+});
+</script>
+<style>body{margin:0;background:#f7f8f4;color:#244c3e;font:16px system-ui,sans-serif;display:grid;place-content:center;min-height:100vh;padding:24px;box-sizing:border-box}main{max-width:460px;background:white;border:1px solid #e2e6da;border-radius:18px;padding:32px}h1{font-size:23px}p{line-height:1.8;color:#67795b}a{color:#244c3e}</style>
+</head>
+<body><main><h1>시트 연결 확인 중</h1><p id="status">선택한 파일의 연결 결과를 채용 사이트에 전달하고 있습니다.</p><a href="./" target="_blank" rel="noopener">채용 사이트 열기</a></main></body>
+</html>

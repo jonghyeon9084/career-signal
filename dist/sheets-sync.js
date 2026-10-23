@@ -4,6 +4,11 @@ import {GOOGLE_CLIENT_ID,GOOGLE_PICKER_API_KEY,GOOGLE_PROJECT_NUMBER} from './sy
 const SCOPE='https://www.googleapis.com/auth/drive.file';
 const API=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
 const TAB='시트1';
+export function fileAccessUrl({clientId=GOOGLE_CLIENT_ID,redirectUri,state}){
+  const url=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',scope:SCOPE,include_granted_scopes:'false',access_type:'online',prompt:'consent',trigger_onepick:'true',file_ids:SHEET_ID,mimetypes:'application/vnd.google-apps.spreadsheet',state}).toString();
+  return url.href;
+}
 export const isSyncConfigured=()=>Boolean(GOOGLE_CLIENT_ID&&GOOGLE_PICKER_API_KEY&&GOOGLE_PROJECT_NUMBER);
 export function columnName(index){let name='';for(let n=index+1;n>0;n=Math.floor((n-1)/26))name=String.fromCharCode(65+(n-1)%26)+name;return name;}
 export function sheetSnapshot(payload){
@@ -82,6 +87,35 @@ export class SheetsSync {
     if(!file?.isAppAuthorized){await this.pickSheet();file=await this.request(endpoint);}
     if(file?.id!==SHEET_ID||!file.isAppAuthorized)throw new Error('선택한 채용 시트의 접근 권한을 확인하지 못했습니다. 다시 연결해 주세요.');
     if(!file.capabilities?.canEdit)throw new Error('현재 Google 계정은 이 시트를 수정할 수 없습니다. 시트 소유자 계정으로 연결해 주세요.');
+  }
+  // A first-party Google picker can grant the same single-file permission when an embedded picker cannot load.
+  // Existing GIS credentials remain in memory. The returned authorization code is never exchanged or stored;
+  // the Drive API must independently confirm the new file grant before the app reports success.
+  grantFileAccess(){
+    if(!this.hasToken)return Promise.reject(new Error('먼저 Google 계정으로 연결해 주세요.'));
+    if(this.connecting)return Promise.reject(new Error('Google 연결을 진행 중입니다.'));
+    const state=crypto.randomUUID(),channel=new BroadcastChannel('career-signal-file-access');
+    const url=fileAccessUrl({redirectUri:new URL('./file-access.html',location.href).href,state});
+    const popup=window.open(url,'career-signal-file-access','popup,width=760,height=720');
+    if(!popup){channel.close();return Promise.reject(new Error('파일 선택 창이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.'));}
+    this.connecting=true;this.onState('connecting');
+    return new Promise((resolve,reject)=>{
+      let settled=false,processing=false;
+      const finish=(error,snapshot)=>{if(settled)return;settled=true;clearTimeout(timer);channel.close();this.connecting=false;if(error){this.onState(this.hasToken?'file-required':'disconnected');reject(error);}else{this.authorized=true;this.onState('connected');resolve(snapshot);}};
+      const timer=setTimeout(()=>finish(new Error('Google 파일 선택이 완료되지 않았습니다. 다시 시도할 수 있습니다.')),300000);
+      channel.onmessage=async({data})=>{
+        if(data?.state!==state||settled||processing)return;
+        processing=true;
+        channel.postMessage({type:'ack',state});
+        try{
+          if(data.error)throw new Error('Google 파일 선택을 완료하지 않았습니다. 다시 시도해 주세요.');
+          if(!data.files?.includes(SHEET_ID))throw new Error('지원 후보 리스트를 선택해 주세요.');
+          const file=await this.request(`https://www.googleapis.com/drive/v3/files/${SHEET_ID}?fields=id,isAppAuthorized,capabilities(canEdit)`);
+          if(file.id!==SHEET_ID||!file.isAppAuthorized||!file.capabilities?.canEdit)throw new Error('선택한 시트의 수정 권한을 확인하지 못했습니다.');
+          finish(null,await this.read());
+        }catch(error){finish(error);}
+      };
+    });
   }
   pickSheet(){
     return new Promise((resolve,reject)=>{

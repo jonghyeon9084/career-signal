@@ -37,6 +37,8 @@ Google Cloud 프로젝트 `civic-wall-512515-m1`에서 Google Sheets API, Google
 
 다른 기기에서 같은 Google 계정으로 연결하면 됩니다. 이미 앱에 허용한 시트는 Drive API의 isAppAuthorized 및 canEdit으로 확인하여 파일 선택을 생략합니다. 최초 연결에서는 지원 후보 리스트를 선택합니다. Google 로그인을 하지 않은 방문자에게 시트 쓰기 권한을 제공하지 않습니다. Google Sheets는 셀에 대한 원자적인 비교 후 쓰기 API를 제공하지 않으므로, 외부에서 행을 정렬·삭제하는 작업과 저장 버튼을 동시에 수행하지 않는 것이 좋습니다. 앱은 저장 직전에 현재 행을 재조회합니다.
 
+파일 선택기가 로드되지 않으면 ‘파일 선택 창 닫기 · 다시 시도’로 돌아온 뒤 ‘Google 화면에서 파일 선택’을 사용할 수 있습니다. Google의 `trigger_onepick` 파일 선택 경로로 동일한 `drive.file` 권한과 지정된 시트만 요청합니다. OAuth 리디렉션 URI에는 `https://jonghyeon9084.github.io/career-signal/file-access.html`을 등록합니다. 이 보조 경로는 파일 접근 허용을 위한 것이며, 반환된 일회용 코드는 교환하거나 보관하지 않고 URL에서 즉시 제거합니다. 기존 GIS 접근 토큰으로 Drive API가 파일의 앱 허용 여부와 수정 가능 여부를 재검증해야 연결 완료로 처리합니다. 복귀 알림에는 무작위 state를 사용하고, 접근 토큰은 URL이나 브라우저 저장소에 넣지 않습니다.
+
 필수 헤더: `기업명`, `직무`. 지원 헤더: `지원 여부`, `관심 공고`, `요구 기술`, `연봉`, `매출액`, `직원수`, `모집 마감일`, `공고 링크`. 열 순서를 바꾸거나 행을 추가해도 이름으로 연결합니다.
 
 기술 참고: [Google 로그인 토큰 모델](https://developers.google.com/identity/oauth2/web/guides/use-token-model), [파일별 접근 범위](https://developers.google.com/workspace/sheets/api/scopes), [Google Picker](https://developers.google.com/workspace/drive/picker/guides/web-picker), [GitHub Pages 게시 소스](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).

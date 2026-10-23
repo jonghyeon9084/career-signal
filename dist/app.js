@@ -144,11 +144,16 @@ document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SE
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 window.addEventListener('online',refresh);
 function applySnapshot(snapshot){state.revision++;state.jobs=snapshot.jobs;state.checkedAt=new Date().toISOString();writeStored(CACHE_KEY,{jobs:state.jobs,checkedAt:state.checkedAt});checkedLabel();showNotice('');render();if($('job-dialog').open)renderDialog(state.dialogId);}
-async function openSyncDialog(){
-  $('sync-dialog').showModal();
+const fileAccessButton=document.createElement('button');fileAccessButton.id='google-file-access';fileAccessButton.type='button';fileAccessButton.className='secondary-button';fileAccessButton.textContent='Google 화면에서 파일 선택';fileAccessButton.hidden=true;$('google-connect').after(fileAccessButton);
+function updateSyncActions(){
   $('google-disconnect').hidden=!sync.hasToken;
   $('google-connect').hidden=sync.connected;
   $('google-connect').textContent=sync.hasToken?'파일 선택 다시 시도':'Google로 연결하기';
+  fileAccessButton.hidden=!sync.hasToken||sync.connected;
+}
+async function openSyncDialog(){
+  $('sync-dialog').showModal();
+  updateSyncActions();
   $('export-local').hidden=!storedMarks||!Object.keys(storedMarks).length;
   if(sync.connected){$('sync-message').textContent='Google 계정에 연결되어 있습니다. 관심·지원 표시를 바꾸면 시트에 저장합니다.';return;}
   $('google-connect').disabled=true;
@@ -162,7 +167,11 @@ $('google-connect').addEventListener('click',()=>{
   const connection=sync.connect(); // Keep the user gesture for the Google popup.
   $('sync-dialog').close(); // Google Picker must be outside a native modal's inert backdrop.
   if($('job-dialog').open)$('job-dialog').close();
-  connection.then(snapshot=>{applySnapshot(snapshot);toast('구글 시트에 연결했어요. 이제 모든 기기에서 같은 상태를 확인할 수 있습니다.');}).catch(error=>{$('google-connect').textContent=sync.hasToken?'파일 선택 다시 시도':'Google로 연결하기';$('google-disconnect').hidden=!sync.hasToken;$('sync-dialog').showModal();$('sync-message').textContent=error.message;});
+  connection.then(snapshot=>{applySnapshot(snapshot);toast('구글 시트에 연결했어요. 이제 모든 기기에서 같은 상태를 확인할 수 있습니다.');}).catch(error=>{updateSyncActions();$('sync-dialog').showModal();$('sync-message').textContent=error.message;});
+});
+fileAccessButton.addEventListener('click',()=>{
+  const connection=sync.grantFileAccess();$('sync-dialog').close();
+  connection.then(snapshot=>{applySnapshot(snapshot);toast('구글 시트 연결을 완료했습니다.');}).catch(error=>{updateSyncActions();$('sync-dialog').showModal();$('sync-message').textContent=error.message;});
 });
 $('google-disconnect').addEventListener('click',()=>{sync.disconnect();$('sync-dialog').close();toast('현재 기기의 연결을 해제했습니다. 저장된 시트 내용은 유지됩니다.');});
 $('export-local').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(storedMarks,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='career-signal-local-marks-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
