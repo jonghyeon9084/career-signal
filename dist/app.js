@@ -1,7 +1,7 @@
 import {SHEET_ID,SHEET_URL,CATEGORIES,REFRESH_MS,kstDate,deadlineDays,skillTags,normalizeRows,selectJobs} from './model.js';
 import {readXlsx} from './xlsx.js';
 import {icon,hydrateIcons} from './icons.js';
-import {SheetsSync,isSyncConfigured} from './sheets-sync.js';
+import {SheetsSync,isSyncConfigured} from './sheets-sync.js?v=keyless-1';
 
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -148,7 +148,7 @@ const fileAccessButton=document.createElement('button');fileAccessButton.id='goo
 function updateSyncActions(){
   $('google-disconnect').hidden=!sync.hasToken;
   $('google-connect').hidden=sync.connected;
-  $('google-connect').textContent=sync.hasToken?'파일 선택 다시 시도':'Google로 연결하기';
+  $('google-connect').textContent=sync.hasToken?'연결 다시 확인':'Google로 연결하기';
   fileAccessButton.hidden=!sync.hasToken||sync.connected;
 }
 async function openSyncDialog(){
@@ -159,13 +159,13 @@ async function openSyncDialog(){
   $('google-connect').disabled=true;
   if(!isSyncConfigured()){$('sync-message').textContent='Google 연결 설정을 준비하고 있습니다. 설정을 마치면 이 버튼으로 시트를 연결할 수 있어요.';return;}
   $('sync-message').textContent='Google 연결 준비 중…';
-  try{await sync.prepare();$('google-connect').disabled=false;$('sync-message').textContent='시트를 수정할 수 있는 Google 계정으로 연결해 주세요.';}catch(error){$('sync-message').textContent=error.message;}
+  try{await sync.prepare();$('google-connect').disabled=false;$('sync-message').textContent=sync.hasToken?'Google 화면에서 파일 선택을 눌러 지원 후보 리스트를 허용해 주세요.':'시트를 수정할 수 있는 Google 계정으로 연결해 주세요.';}catch(error){$('sync-message').textContent=error.message;}
 }
 $('sync-button').addEventListener('click',openSyncDialog);
 $('sync-close').addEventListener('click',()=>$('sync-dialog').close());
 $('google-connect').addEventListener('click',()=>{
   const connection=sync.connect(); // Keep the user gesture for the Google popup.
-  $('sync-dialog').close(); // Google Picker must be outside a native modal's inert backdrop.
+  $('sync-dialog').close();
   if($('job-dialog').open)$('job-dialog').close();
   connection.then(snapshot=>{applySnapshot(snapshot);toast('구글 시트에 연결했어요. 이제 모든 기기에서 같은 상태를 확인할 수 있습니다.');}).catch(error=>{updateSyncActions();$('sync-dialog').showModal();$('sync-message').textContent=error.message;});
 });

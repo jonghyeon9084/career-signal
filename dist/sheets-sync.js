@@ -1,5 +1,5 @@
 import {SHEET_ID,normalizeRows} from './model.js';
-import {GOOGLE_CLIENT_ID,GOOGLE_PICKER_API_KEY,GOOGLE_PROJECT_NUMBER} from './sync-config.js';
+import {GOOGLE_CLIENT_ID} from './sync-config.js?v=keyless-1';
 
 const SCOPE='https://www.googleapis.com/auth/drive.file';
 const API=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
@@ -9,7 +9,7 @@ export function fileAccessUrl({clientId=GOOGLE_CLIENT_ID,redirectUri,state}){
   url.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',scope:SCOPE,include_granted_scopes:'false',access_type:'online',prompt:'consent',trigger_onepick:'true',file_ids:SHEET_ID,mimetypes:'application/vnd.google-apps.spreadsheet',state}).toString();
   return url.href;
 }
-export const isSyncConfigured=()=>Boolean(GOOGLE_CLIENT_ID&&GOOGLE_PICKER_API_KEY&&GOOGLE_PROJECT_NUMBER);
+export const isSyncConfigured=()=>Boolean(GOOGLE_CLIENT_ID);
 export function columnName(index){let name='';for(let n=index+1;n>0;n=Math.floor((n-1)/26))name=String.fromCharCode(65+(n-1)%26)+name;return name;}
 export function sheetSnapshot(payload){
   const sheet=payload.sheets?.find(s=>s.properties.title===TAB);
@@ -46,9 +46,10 @@ export class SheetsSync {
   get connected(){return this.hasToken&&this.authorized;}
   prepare(){
     if(!isSyncConfigured())return Promise.resolve(false);
-    if(!this.ready)this.ready=Promise.all([loadScript('https://accounts.google.com/gsi/client'),loadScript('https://apis.google.com/js/api.js')]).then(()=>new Promise((resolve,reject)=>{
-      window.gapi.load('picker',{callback:()=>{this.client=window.google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,include_granted_scopes:false,callback:()=>{},error_callback:()=>{this.disconnect();this.rejectConnection?.(new Error('로그인 창이 닫혔거나 차단되었습니다. 다시 연결해 주세요.'));}});resolve(true);},onerror:()=>reject(new Error('파일 선택 도구를 불러오지 못했습니다.')),timeout:20000,ontimeout:()=>reject(new Error('파일 선택 도구 연결 시간이 초과되었습니다.'))});
-    })).catch(error=>{this.ready=null;throw error;});
+    if(!this.ready)this.ready=loadScript('https://accounts.google.com/gsi/client').then(()=>{
+      this.client=window.google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,include_granted_scopes:false,callback:()=>{},error_callback:()=>{this.disconnect();this.rejectConnection?.(new Error('로그인 창이 닫혔거나 차단되었습니다. 다시 연결해 주세요.'));}});
+      return true;
+    }).catch(error=>{this.ready=null;throw error;});
     return this.ready;
   }
   // Invoke synchronously from a click handler so popup blockers do not suppress Google sign-in.
@@ -75,7 +76,7 @@ export class SheetsSync {
       const snapshot=await this.read();
       this.authorized=true;this.connecting=false;this.onState('connected');return snapshot;
     }catch(error){
-      if(error.pickerRetryable&&this.hasToken){this.authorized=false;this.connecting=false;this.onState('file-required');}
+      if(error.fileRequired&&this.hasToken){this.authorized=false;this.connecting=false;this.onState('file-required');}
       else this.disconnect();
       throw error;
     }
@@ -84,11 +85,11 @@ export class SheetsSync {
     const endpoint=`https://www.googleapis.com/drive/v3/files/${SHEET_ID}?fields=id,isAppAuthorized,capabilities(canEdit)`;
     let file;
     try{file=await this.request(endpoint);}catch(error){if(![403,404].includes(error.status))throw error;}
-    if(!file?.isAppAuthorized){await this.pickSheet();file=await this.request(endpoint);}
+    if(!file?.isAppAuthorized)throw Object.assign(new Error('Google 로그인은 완료되었습니다. ‘Google 화면에서 파일 선택’을 눌러 지원 후보 리스트를 허용해 주세요.'),{fileRequired:true});
     if(file?.id!==SHEET_ID||!file.isAppAuthorized)throw new Error('선택한 채용 시트의 접근 권한을 확인하지 못했습니다. 다시 연결해 주세요.');
     if(!file.capabilities?.canEdit)throw new Error('현재 Google 계정은 이 시트를 수정할 수 없습니다. 시트 소유자 계정으로 연결해 주세요.');
   }
-  // A first-party Google picker can grant the same single-file permission when an embedded picker cannot load.
+  // Google hosts file selection; no developer API key is sent to the browser.
   // Existing GIS credentials remain in memory. The returned authorization code is never exchanged or stored;
   // the Drive API must independently confirm the new file grant before the app reports success.
   grantFileAccess(){
@@ -101,7 +102,7 @@ export class SheetsSync {
     this.connecting=true;this.onState('connecting');
     return new Promise((resolve,reject)=>{
       let settled=false,processing=false;
-      const finish=(error,snapshot)=>{if(settled)return;settled=true;clearTimeout(timer);channel.close();this.connecting=false;if(error){this.onState(this.hasToken?'file-required':'disconnected');reject(error);}else{this.authorized=true;this.onState('connected');resolve(snapshot);}};
+      const finish=(error,snapshot)=>{if(settled)return;settled=true;clearTimeout(timer);channel.close();this.connecting=false;if(error){this.authorized=false;this.onState(this.hasToken?'file-required':'disconnected');reject(error);}else{this.authorized=true;this.onState('connected');resolve(snapshot);}};
       const timer=setTimeout(()=>finish(new Error('Google 파일 선택이 완료되지 않았습니다. 다시 시도할 수 있습니다.')),300000);
       channel.onmessage=async({data})=>{
         if(data?.state!==state||settled||processing)return;
@@ -109,30 +110,17 @@ export class SheetsSync {
         channel.postMessage({type:'ack',state});
         try{
           if(data.error)throw new Error('Google 파일 선택을 완료하지 않았습니다. 다시 시도해 주세요.');
-          if(!data.files?.includes(SHEET_ID))throw new Error('지원 후보 리스트를 선택해 주세요.');
+          if(!Array.isArray(data.files)||!data.files.includes(SHEET_ID))throw new Error('지원 후보 리스트를 선택해 주세요.');
           const file=await this.request(`https://www.googleapis.com/drive/v3/files/${SHEET_ID}?fields=id,isAppAuthorized,capabilities(canEdit)`);
           if(file.id!==SHEET_ID||!file.isAppAuthorized||!file.capabilities?.canEdit)throw new Error('선택한 시트의 수정 권한을 확인하지 못했습니다.');
           finish(null,await this.read());
-        }catch(error){finish(error);}
+        }catch(error){
+          if([401,403,404].includes(error.status)){
+            this.disconnect();
+            finish(new Error('파일 선택 후 로그인 권한을 새로 확인해야 합니다. 같은 계정으로 ‘Google로 연결하기’를 눌러 주세요.'));
+          }else finish(error);
+        }
       };
-    });
-  }
-  pickSheet(){
-    return new Promise((resolve,reject)=>{
-      const g=window.google;
-      let picker,timer,settled=false;
-      const recovery=document.createElement('button');recovery.type='button';recovery.className='picker-recovery';recovery.textContent='파일 선택 창 닫기 · 다시 시도';
-      const retryError=message=>Object.assign(new Error(message),{pickerRetryable:true});
-      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);recovery.remove();picker?.dispose();error?reject(error):resolve();};
-      recovery.addEventListener('click',()=>finish(retryError('Google 로그인은 유지됩니다. 파일 선택을 다시 시도해 주세요.')));
-      const view=new g.picker.DocsView(g.picker.ViewId.SPREADSHEETS).setMode(g.picker.DocsViewMode.LIST).setQuery('지원 후보 리스트');
-      picker=new g.picker.PickerBuilder().addView(view).setOAuthToken(this.token).setDeveloperKey(GOOGLE_PICKER_API_KEY).setAppId(GOOGLE_PROJECT_NUMBER).setOrigin(location.origin).setLocale('ko').setTitle('동기화할 ‘지원 후보 리스트’를 선택하세요').setCallback(data=>{
-        if(data.action===g.picker.Action.PICKED){const selected=data.docs?.[0];finish(selected?.id!==SHEET_ID?retryError('연결된 채용 시트 ‘지원 후보 리스트’를 선택해 주세요.'):null);}
-        if(data.action===g.picker.Action.CANCEL)finish(retryError('시트 선택을 취소했습니다. 파일 선택을 다시 시도할 수 있습니다.'));
-      }).build();
-      timer=setTimeout(()=>finish(retryError('Google 파일 선택기가 응답하지 않았습니다. 로그인은 유지되며 파일 선택만 다시 시도할 수 있습니다.')),120000);
-      picker.setVisible(true);
-      document.body.append(recovery);
     });
   }
   disconnect(){this.token=null;this.expires=0;this.authorized=false;this.connecting=false;this.onState('disconnected');}

@@ -52,25 +52,26 @@ test('pending Google connection prevents duplicate attempts and resets on denial
   assert.equal(sync.connecting,false);assert.equal(sync.connected,false);
 });
 
-test('previous explicit file grants skip Picker; public visibility alone does not',async()=>{
+test('explicit file grants allow access; public visibility and read-only access do not',async()=>{
   const {SHEET_ID}=await import('../dist/model.js');
-  const sync=new SheetsSync();let chosen=0;
+  const sync=new SheetsSync();
   sync.request=async()=>({id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:true}});
-  sync.pickSheet=async()=>{chosen++;};
-  await sync.ensureSheetAccess();assert.equal(chosen,0);
-  let reads=0;sync.request=async()=>({id:SHEET_ID,isAppAuthorized:++reads>1,capabilities:{canEdit:true}});
-  await sync.ensureSheetAccess();assert.equal(chosen,1);
+  await sync.ensureSheetAccess();
+  sync.request=async()=>({id:SHEET_ID,isAppAuthorized:false,capabilities:{canEdit:true}});
+  await assert.rejects(sync.ensureSheetAccess(),{fileRequired:true});
+  sync.request=async()=>{throw Object.assign(new Error('not found'),{status:404});};
+  await assert.rejects(sync.ensureSheetAccess(),{fileRequired:true});
   sync.request=async()=>({id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:false}});
   await assert.rejects(sync.ensureSheetAccess(),/수정할 수 없습니다/);
 });
 
-test('a failed file chooser retains login and retries without another OAuth popup',async()=>{
+test('missing file access retains login and can be checked again without another OAuth popup',async()=>{
   const sync=new SheetsSync();let popups=0,attempts=0;
   sync.client={requestAccessToken(){popups++;}};
   sync.token='test-only';sync.expires=Date.now()+60000;
-  sync.ensureSheetAccess=async()=>{if(++attempts===1)throw Object.assign(new Error('picker timeout'),{pickerRetryable:true});};
+  sync.ensureSheetAccess=async()=>{if(++attempts===1)throw Object.assign(new Error('file permission required'),{fileRequired:true});};
   sync.read=async()=>sheetSnapshot(fixture());
-  await assert.rejects(sync.connect(),/picker timeout/);
+  await assert.rejects(sync.connect(),/file permission required/);
   assert.equal(sync.hasToken,true);assert.equal(sync.connected,false);assert.equal(sync.connecting,false);
   await sync.connect();
   assert.equal(sync.connected,true);assert.equal(popups,0);assert.equal(attempts,2);
@@ -86,4 +87,42 @@ test('first-party file selection keeps the single-file scope and never puts acce
   assert.equal(url.searchParams.get('state'),'random-state');
   assert.equal(url.searchParams.has('access_token'),false);
   assert.equal(url.searchParams.has('client_secret'),false);
+});
+
+test('hosted file grant validates state, selected file and remote permissions before connecting',async t=>{
+  const {SHEET_ID}=await import('../dist/model.js');
+  for(const scenario of ['success','wrong-file','denied','read-only','stale-token']){
+    await t.test(scenario,async()=>{
+      const original={window:globalThis.window,location:globalThis.location,BroadcastChannel:globalThis.BroadcastChannel};
+      let channel,state,requests=0;
+      globalThis.location={href:'https://jonghyeon9084.github.io/career-signal/'};
+      globalThis.window={open(url){state=new URL(url).searchParams.get('state');return {};}};
+      globalThis.BroadcastChannel=class{
+        constructor(){channel=this;this.closed=false;}
+        postMessage(data){assert.equal(data.type,'ack');}
+        close(){this.closed=true;}
+      };
+      try{
+        const sync=new SheetsSync({fetchImpl:async url=>{
+          requests++;
+          if(scenario==='stale-token')return {ok:false,status:403};
+          return {ok:true,json:async()=>url.includes('/drive/v3/')?{id:SHEET_ID,isAppAuthorized:true,capabilities:{canEdit:scenario!=='read-only'}}:fixture()};
+        }});
+        sync.token='test-only';sync.expires=Date.now()+60000;
+        const result=sync.grantFileAccess();
+        await channel.onmessage({data:{state:'unrelated-state',files:[SHEET_ID]}});
+        assert.equal(requests,0);assert.equal(sync.connected,false);
+        const checked=scenario==='success'?result:assert.rejects(result);
+        await channel.onmessage({data:{state,files:[scenario==='wrong-file'?'other-file':SHEET_ID],error:scenario==='denied'?'access_denied':null}});
+        await checked;
+        assert.equal(sync.connected,scenario==='success');
+        assert.equal(sync.connecting,false);assert.equal(channel.closed,true);
+        if(scenario==='success')assert.equal(requests,2);
+        if(scenario==='stale-token')assert.equal(sync.hasToken,false);
+        if(['wrong-file','denied'].includes(scenario))assert.equal(requests,0);
+      }finally{
+        for(const [name,value] of Object.entries(original))if(value===undefined)delete globalThis[name];else globalThis[name]=value;
+      }
+    });
+  }
 });
